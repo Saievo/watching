@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  stock-monitor:
+    build: .
+    container_name: stock-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    environment:
+      - TZ=America/New_York
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
