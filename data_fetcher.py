@@ -27,28 +27,25 @@ INTERVAL_PERIOD_MAP = {
 
 class DataFetcher:
     """
-    美股数据获取器
+    美股数据获取器（无状态，每次调用传入 symbol）
     封装 yfinance，提供统一的 K 线数据接口
     """
 
-    def __init__(self, symbol: str):
-        """
-        初始化数据获取器
+    def __init__(self):
+        """初始化数据获取器（无状态，symbol 在 fetch 时传入）"""
+        pass
 
-        :param symbol: 股票代码，例如 'AAPL', 'TSLA', 'SPY'
+    def fetch(self, symbol: str, interval: str = "15m", period: Optional[str] = None) -> pd.DataFrame:
         """
-        self.symbol = symbol.upper()
+        获取指定股票、指定时间框架的历史 K 线数据
 
-    def fetch(self, interval: str = "15m", period: Optional[str] = None) -> pd.DataFrame:
-        """
-        获取指定时间框架的历史 K 线数据
-
+        :param symbol:   股票代码，例如 'AAPL', 'TSLA', 'SPY'
         :param interval: K 线周期，如 '1m', '15m', '1h', '1d'
         :param period:   数据回溯时长，不传则根据 interval 自动选择
         :return:         标准化 DataFrame（包含 Open/High/Low/Close/Volume）
-        :raises ValueError: 当 interval 不受支持时
-        :raises RuntimeError: 当数据获取失败时
         """
+        symbol = symbol.upper()
+
         if interval not in INTERVAL_PERIOD_MAP:
             raise ValueError(
                 f"不支持的 interval: {interval}，"
@@ -56,16 +53,15 @@ class DataFetcher:
             )
 
         period = period or INTERVAL_PERIOD_MAP[interval]
-        logger.info(f"[{self.symbol}] 正在获取 {interval} K 线，回溯周期: {period}")
+        logger.info(f"[{symbol}] 正在获取 {interval} K 线，回溯周期: {period}")
 
         try:
-            ticker = yf.Ticker(self.symbol)
+            ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval, auto_adjust=True)
 
             if df is None or df.empty:
-                raise RuntimeError(
-                    f"[{self.symbol}] 获取数据为空，请检查股票代码或网络连接"
-                )
+                logger.warning(f"[{symbol}] 获取数据为空，请检查股票代码或网络连接")
+                return pd.DataFrame()
 
             # 标准化列名（yfinance 默认已是首字母大写，这里做防御处理）
             df = self._normalize_columns(df)
@@ -77,24 +73,25 @@ class DataFetcher:
             df.dropna(subset=["Open", "High", "Low", "Close", "Volume"], inplace=True)
 
             logger.info(
-                f"[{self.symbol}] 数据获取成功，共 {len(df)} 条，"
+                f"[{symbol}] 数据获取成功，共 {len(df)} 条，"
                 f"最新时间: {df.index[-1]}"
             )
             return df
 
         except Exception as e:
-            logger.error(f"[{self.symbol}] 数据获取失败: {e}", exc_info=True)
-            raise RuntimeError(f"数据获取失败: {e}") from e
+            logger.error(f"[{symbol}] 数据获取失败: {e}", exc_info=True)
+            return pd.DataFrame()
 
-    def fetch_latest(self, interval: str = "15m", n: int = 100) -> pd.DataFrame:
+    def fetch_latest(self, symbol: str, interval: str = "15m", n: int = 100) -> pd.DataFrame:
         """
         获取最近 n 条 K 线（用于实时监控，只取近期数据）
 
+        :param symbol:   股票代码
         :param interval: K 线周期
         :param n:        需要的 K 线数量
         :return:         DataFrame
         """
-        df = self.fetch(interval=interval)
+        df = self.fetch(symbol=symbol, interval=interval)
         return df.tail(n)
 
     @staticmethod
