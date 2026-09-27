@@ -1,0 +1,20 @@
+{
+  "max_concurrency": 10,
+  "auto_scan": {
+    "enabled": true
+  },
+  "analysis": {
+    "provider": "ark-coding",
+    "deep_model": "ark-code-latest",
+    "quick_model": "ark-code-latest",
+    "research_depth": 2,
+    "language": "中文",
+    "analysts": [
+      "market",
+      "news",
+      "social",
+      "fundamentals"
+    ],
+    "temperature": null
+  }
+}

@@ -32,3 +32,6 @@ logs/*.log.*
 
 # Docker
 *.tar
+
+# 生成的图表
+mstr_cd_nx_4h.png

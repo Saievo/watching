@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>股票分析看板</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+  <script>
+    try {
+      document.documentElement.dataset.theme = localStorage.getItem("sd-theme") || "dark";
+    } catch (e) {
+      document.documentElement.dataset.theme = "dark";
+    }
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/vendor/github-dark.min.css" />
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">📈</div>
+        <div>
+          <div class="brand-name">股票分析看板</div>
+          <div class="brand-sub">TradingAgents 外挂</div>
+        </div>
+      </div>
+      <div class="side-tools">
+        <button id="btn-theme" class="theme-toggle" title="切换日间 / 夜间模式">🌛</button>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" data-view="watchlist" href="#/watchlist">
+          <span class="nav-ico">⭐</span> 收藏列表
+        </a>
+        <a class="nav-item" data-view="reports" href="#/reports">
+          <span class="nav-ico">📄</span> 分析报告
+        </a>
+        <a class="nav-item" data-view="decisions" href="#/decisions">
+          <span class="nav-ico">🧭</span> 决策总览
+        </a>
+        <a class="nav-item" data-view="review" href="#/review">
+          <span class="nav-ico">🏆</span> 决策胜率
+        </a>
+        <a class="nav-item" data-view="jobs" href="#/jobs">
+          <span class="nav-ico">🛠</span> 运行记录
+        </a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="foot-top-row">
+          <div class="server-state" id="server-state">
+            <span class="dot"></span> 连接中…
+          </div>
+          <button id="btn-settings" class="theme-toggle" title="分析设置">⚙️</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-refresh-all">⟳ 刷新行情</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- 收藏列表 -->
+      <section id="view-watchlist" class="view">
+        <header class="view-head">
+          <div>
+            <h1>收藏列表</h1>
+            <p class="view-desc">按分类分组，卡片展示最新价、涨跌幅与核心指标</p>
+          </div>
+          <div class="head-actions">
+            <button class="btn btn-primary" id="btn-add-stock">＋ 添加股票</button>
+            <button class="btn" id="btn-scan-1234">🔍 共振扫描</button>
+            <button class="btn" id="btn-analyze-all">⚡ 批量分析</button>
+          </div>
+        </header>
+        <div class="filter-bar" id="category-filter"></div>
+        <div id="watchlist" class="watchlist"></div>
+      </section>
+
+      <!-- 股票详情 -->
+      <section id="view-detail" class="view hidden">
+        <header class="view-head">
+          <div>
+            <button class="btn btn-ghost btn-sm" data-back>← 返回列表</button>
+            <h1 id="detail-title">加载中…</h1>
+            <p class="view-desc" id="detail-sub"></p>
+          </div>
+          <div class="head-actions">
+            <button class="btn btn-primary" id="btn-detail-analyze">⚡ 一键 TradingAgents 分析</button>
+          </div>
+        </header>
+        <div id="detail-body"></div>
+      </section>
+
+      <!-- 报告列表 -->
+      <section id="view-reports" class="view hidden">
+        <header class="view-head">
+          <div>
+            <h1>分析报告</h1>
+            <p class="view-desc">TradingAgents 多智能体产出的 Markdown 报告</p>
+          </div>
+        </header>
+        <div id="reports-list" class="reports-list"></div>
+      </section>
+
+      <!-- 决策总览 -->
+      <section id="view-decisions" class="view hidden">
+        <header class="view-head">
+          <div>
+            <h1>决策总览</h1>
+            <p class="view-desc">每次分析最终的买卖策略：方向 / 入场价 / 止损 / 分仓</p>
+          </div>
+        </header>
+        <div class="filter-bar" id="decision-filter"></div>
+        <div id="decision-summary" class="decision-summary"></div>
+        <div id="decisions-table" class="decisions-table-wrap"></div>
+      </section>
+
+      <!-- 决策胜率复盘 -->
+      <section id="view-review" class="view hidden">
+        <header class="view-head">
+          <div>
+            <h1>决策胜率复盘</h1>
+            <p class="view-desc">综合决议 tag 在有效期内的方向胜率（区分短 / 中 / 长），每次分析完成后自动复盘</p>
+          </div>
+          <div class="head-actions">
+            <button class="btn" id="btn-review-run">⟳ 立即复盘</button>
+          </div>
+        </header>
+        <div id="review-summary"></div>
+        <div class="filter-bar" id="review-filter"></div>
+        <div id="review-table"></div>
+      </section>
+
+      <!-- 报告阅读器 -->
+      <section id="view-report" class="view hidden">
+        <header class="view-head">
+          <div>
+            <button class="btn btn-ghost btn-sm" data-back>← 返回报告列表</button>
+            <h1 id="report-title">加载中…</h1>
+            <p class="view-desc" id="report-sub"></p>
+          </div>
+          <div class="head-actions">
+            <button class="btn btn-sm" id="btn-copy-md">复制 Markdown</button>
+            <a class="btn btn-sm" id="btn-download-md" download>下载 .md</a>
+          </div>
+        </header>
+        <div class="report-layout">
+          <nav class="report-toc" id="report-toc"></nav>
+          <article class="markdown-body" id="report-content"></article>
+        </div>
+      </section>
+
+      <!-- 运行记录 -->
+      <section id="view-jobs" class="view hidden">
+        <header class="view-head">
+          <div>
+            <h1>运行记录</h1>
+            <p class="view-desc">一键分析任务的实时进度与结果</p>
+          </div>
+        </header>
+        <div id="jobs-list" class="jobs-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 添加 / 编辑收藏弹窗 -->
+  <div class="modal-mask hidden" id="stock-modal">
+    <div class="modal">
+      <h2 id="stock-modal-title">添加股票</h2>
+      <form id="stock-form">
+        <div class="form-grid">
+          <label>股票代码 *
+            <input name="symbol" placeholder="如 AAPL / 0700.HK / BTC-USD" required />
+          </label>
+          <label>名称（留空自动获取）
+            <input name="name" placeholder="自动识别" />
+          </label>
+          <label>分类
+            <input name="category" list="category-options" placeholder="未分类" />
+            <datalist id="category-options"></datalist>
+          </label>
+          <label>盯盘策略
+            <select name="strategy" id="strategy-select"></select>
+          </label>
+          <label>K 线周期
+            <select name="interval" id="interval-select"></select>
+          </label>
+          <label>备注
+            <input name="note" placeholder="选填" />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 分析弹窗 -->
+  <div class="modal-mask hidden" id="analyze-modal">
+    <div class="modal">
+      <h2>⚡ TradingAgents 一键分析</h2>
+      <div class="analyze-summary" id="analyze-summary"></div>
+      <form id="analyze-form">
+        <div class="form-grid">
+          <label>分析日期
+            <input type="date" name="trade_date" required />
+          </label>
+          <label>LLM 供应商
+            <select name="provider" id="provider-select">
+              <option value="deepseek">DeepSeek</option>
+              <option value="glm">GLM（Z.AI 国际）</option>
+              <option value="glm-cn">GLM（智谱国内）</option>
+              <option value="openai">OpenAI</option>
+              <option value="google">Google Gemini</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="ark-coding">火山引擎方舟（Coding Plan）</option>
+              <option value="openai_compatible">OpenAI 兼容端点</option>
+            </select>
+          </label>
+          <label>深度思考模型
+            <select name="deep_model" id="an-deep-model"></select>
+            <input id="an-deep-model-custom" class="model-custom hidden" placeholder="输入自定义模型 ID" />
+          </label>
+          <label>快速思考模型
+            <select name="quick_model" id="an-quick-model"></select>
+            <input id="an-quick-model-custom" class="model-custom hidden" placeholder="输入自定义模型 ID" />
+          </label>
+          <label>研究深度（辩论轮数）
+            <select name="research_depth">
+              <option value="1">1 - 快速</option>
+              <option value="2" selected>2 - 标准</option>
+              <option value="3">3 - 深度</option>
+            </select>
+          </label>
+          <label>报告语言
+            <select name="language">
+              <option value="中文" selected>中文</option>
+              <option value="English">English</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-field">
+          <span class="field-label">分析师团队</span>
+          <div class="checkbox-row" id="analyst-checks">
+            <label><input type="checkbox" name="analysts" value="market" checked /> 市场</label>
+            <label><input type="checkbox" name="analysts" value="news" checked /> 新闻</label>
+            <label><input type="checkbox" name="analysts" value="social" checked /> 情绪</label>
+            <label><input type="checkbox" name="analysts" value="fundamentals" checked /> 基本面</label>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close-modal>取消</button>
+          <button type="submit" class="btn btn-primary">开始分析</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 批量分析弹窗 -->
+  <div class="modal-mask hidden" id="batch-modal">
+    <div class="modal modal-wide">
+      <h2>⚡ 批量分析</h2>
+      <div class="form-grid">
+        <label>分析日期
+          <input type="date" name="trade_date" id="batch-date" required />
+        </label>
+        <label>并发数（DeepSeek 并发充足可调大）
+          <input type="number" name="max_concurrency" id="batch-concurrency" min="1" max="200" required />
+        </label>
+      </div>
+      <div class="batch-list-head">
+        <span class="field-label">选择要分析的股票</span>
+        <span>
+          <button type="button" class="btn btn-ghost btn-sm" id="batch-check-all">全选</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="batch-check-none">清空</button>
+        </span>
+      </div>
+      <div class="batch-list" id="batch-list"></div>
+      <p class="hint">提示：并发过高会同时启动多个 TradingAgents 进程，注意内存占用；每个任务内部串行调用 LLM。</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>取消</button>
+        <button type="button" class="btn btn-primary" id="batch-start">开始分析</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1234 扫描弹窗 -->
+  <div class="modal-mask hidden" id="scan-modal">
+    <div class="modal modal-wide">
+      <h2>🔍 共振扫描</h2>
+      <div class="form-grid">
+        <label>扫描范围
+          <select id="scan-scope">
+            <option value="favorites">收藏列表</option>
+            <option value="custom">自定义列表</option>
+          </select>
+        </label>
+        <label>时间窗口（小时）
+          <input type="number" id="scan-window" min="1" max="168" value="24" />
+        </label>
+      </div>
+      <div class="form-field" id="scan-symbols-field">
+        <span class="field-label">自定义股票代码（逗号或空格分隔）</span>
+        <input id="scan-symbols" placeholder="AAPL, MSFT, 0700.HK, 600519.SS ..." />
+      </div>
+      <div id="scan-results"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>关闭</button>
+        <button type="button" class="btn btn-primary" id="scan-start">开始扫描</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分析设置弹窗 -->
+  <div class="modal-mask hidden" id="settings-modal">
+    <div class="modal modal-wide">
+      <h2>⚙️ 分析设置（公共默认参数）</h2>
+      <p class="hint">一键分析 / 批量分析 / 续跑都会按这里的默认参数执行；分析弹窗里可对单次任务临时覆盖。</p>
+      <div class="form-grid">
+        <label>LLM 供应商
+          <select name="provider" id="set-provider">
+            <option value="deepseek">DeepSeek</option>
+            <option value="glm">GLM（Z.AI 国际）</option>
+            <option value="glm-cn">GLM（智谱国内）</option>
+            <option value="openai">OpenAI</option>
+            <option value="google">Google Gemini</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="ark-coding">火山引擎方舟（Coding Plan）</option>
+            <option value="openai_compatible">OpenAI 兼容端点</option>
+          </select>
+        </label>
+        <label>深度思考模型
+          <select id="set-deep-model"></select>
+          <input id="set-deep-model-custom" class="model-custom hidden" placeholder="输入自定义模型 ID" />
+        </label>
+        <label>快速思考模型
+          <select id="set-quick-model"></select>
+          <input id="set-quick-model-custom" class="model-custom hidden" placeholder="输入自定义模型 ID" />
+        </label>
+        <label>研究深度（辩论轮数）
+          <select name="research_depth" id="set-depth">
+            <option value="1">1 - 快速</option>
+            <option value="2">2 - 标准</option>
+            <option value="3">3 - 深度</option>
+          </select>
+        </label>
+        <label>报告语言
+          <select name="language" id="set-language">
+            <option value="中文">中文</option>
+            <option value="English">English</option>
+          </select>
+        </label>
+        <label>采样温度（留空用模型默认）
+          <input type="number" name="temperature" id="set-temperature" min="0" max="2" step="0.1" placeholder="0.0 ~ 2.0" />
+        </label>
+      </div>
+      <div class="form-field">
+        <span class="field-label">分析师团队（默认全部勾选）</span>
+        <div class="checkbox-row" id="set-analysts">
+          <label><input type="checkbox" value="market" /> 市场</label>
+          <label><input type="checkbox" value="news" /> 新闻</label>
+          <label><input type="checkbox" value="social" /> 情绪</label>
+          <label><input type="checkbox" value="fundamentals" /> 基本面</label>
+        </div>
+      </div>
+      <div class="form-field">
+        <label style="display:flex;align-items:center;gap:8px">
+          同时并发分析数
+          <input type="number" id="set-concurrency" min="1" max="200" style="width:100px" />
+        </label>
+      </div>
+      <div class="form-field">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="set-auto-scan" style="accent-color:var(--accent-check);width:16px;height:16px" />
+          美股交易时段自动共振扫描（美东 09:31~16:01，每 30 分钟一次，约 +1 分钟触发）
+        </label>
+        <div class="auto-scan-status" id="set-auto-scan-status"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" data-close-modal>取消</button>
+        <button type="button" class="btn btn-primary" id="settings-save">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast-wrap"></div>
+
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/highlight.min.js"></script>
+  <script src="/vendor/echarts.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
