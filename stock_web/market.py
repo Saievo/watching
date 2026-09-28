@@ -130,19 +130,22 @@ def ensure_indicator_bundle(symbol: str, force: bool = False) -> bool:
         _ind_pending.add(symbol)
 
     def _worker():
+        # Wait for a slot *inside* the worker. Acquiring on the caller's thread
+        # would block whoever asked (e.g. a /api/stocks/{sym}/data request) even
+        # though this function promises to be non-blocking.
+        _ind_slots.acquire()
         try:
             bundle = _compute_indicator_bundle(symbol)
             bundle["_at"] = time.time()
             with _ind_lock:
                 _ind_cache[symbol] = bundle
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("[%s] 指标包计算失败: %s", symbol, exc, exc_info=True)
         finally:
             with _ind_lock:
                 _ind_pending.discard(symbol)
             _ind_slots.release()
 
-    _ind_slots.acquire()
     threading.Thread(target=_worker, daemon=True).start()
     return False
 
@@ -702,16 +705,18 @@ def ensure_resonance(symbol: str, window_hours: int = 24) -> bool:
         _s1234_pending.add(key)
 
     def _worker():
+        # Same rule as ensure_indicator_bundle: queue for the slot here so the
+        # caller is never the one that blocks.
+        _s1234_slots.acquire()
         try:
             calc_1234(symbol, window_hours)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("[%s] 1234 共振计算失败: %s", symbol, exc, exc_info=True)
         finally:
             with _s1234_lock:
                 _s1234_pending.discard(key)
             _s1234_slots.release()
 
-    _s1234_slots.acquire()
     threading.Thread(target=_worker, daemon=True).start()
     return False
 

@@ -85,9 +85,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Stock Dashboard", version="1.0.0", lifespan=lifespan)
+# The dashboard serves its own frontend from this same origin, so it never
+# needs cross-origin access. Lock CORS down to localhost anyway: with
+# allow_origins=["*"] any page you happen to visit could read reports and fire
+# off analysis jobs (which spend real LLM credit) against 127.0.0.1:8787.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^http://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1321,5 +1325,10 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("STOCK_WEB_PORT", "8787"))
-    logger.info("Stock Dashboard 运行在 http://127.0.0.1:%d", port)
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    # Default to loopback. The dashboard has no authentication and can spend
+    # LLM credit / delete reports, so it must not listen on the LAN by default.
+    # Set STOCK_WEB_HOST=0.0.0.0 explicitly if you really want that.
+    host = os.environ.get("STOCK_WEB_HOST", "127.0.0.1")
+    shown = host if host not in ("0.0.0.0", "::") else "<本机IP>"
+    logger.info("Stock Dashboard 运行在 http://%s:%d", shown, port)
+    uvicorn.run(app, host=host, port=port, log_level="warning")
