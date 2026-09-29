@@ -8,23 +8,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional
 
+from intervals import INTERVALS, is_supported, period_of
+
 logger = logging.getLogger(__name__)
-
-# yfinance 支持的 interval 对应的合理历史数据范围
-INTERVAL_PERIOD_MAP = {
-    "1m":  "7d",
-    "2m":  "60d",
-    "5m":  "60d",
-    "15m": "60d",
-    "30m": "60d",
-    "60m": "730d",
-    "90m": "60d",
-    "1h":  "730d",
-    "1d":  "5y",
-    "1wk": "10y",
-    "1mo": "max",
-}
-
 
 class DataFetcher:
     """
@@ -47,13 +33,14 @@ class DataFetcher:
         """
         symbol = symbol.upper()
 
-        if interval not in INTERVAL_PERIOD_MAP:
+        # 周期表见 intervals.py —— 这个模块不再自己维护一份
+        if not is_supported(interval):
             raise ValueError(
                 f"不支持的 interval: {interval}，"
-                f"可选值为: {list(INTERVAL_PERIOD_MAP.keys())}"
+                f"可选值为: {list(INTERVALS.keys())}"
             )
 
-        period = period or INTERVAL_PERIOD_MAP[interval]
+        period = period or period_of(interval)
         logger.info(f"[{symbol}] 正在获取 {interval} K 线，回溯周期: {period}")
 
         try:

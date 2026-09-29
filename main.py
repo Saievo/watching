@@ -15,6 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from data_fetcher import DataFetcher
 from strategy import StrategyEngine, STRATEGY_REGISTRY
 from notifier import BarkNotifier
+from intervals import minutes_of
 
 # ── 加载环境变量 ──────────────────────────────────────────────
 load_dotenv()
@@ -105,12 +106,8 @@ def parse_stock_configs() -> list[dict]:
 
 
 def interval_to_minutes(interval: str) -> int:
-    """将 interval 字符串转换为分钟数（用于调度器）"""
-    mapping = {
-        "1m": 1, "2m": 2, "5m": 5, "15m": 15, "30m": 30,
-        "60m": 60, "1h": 60, "90m": 90, "1d": 1440,
-    }
-    return mapping.get(interval, 15)
+    """将 interval 字符串转换为分钟数（用于调度器）。周期表见 intervals.py。"""
+    return minutes_of(interval)
 
 
 # ── 核心监控任务 ──────────────────────────────────────────────

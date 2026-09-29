@@ -25,6 +25,13 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
+from intervals import (  # noqa: E402
+    fetch_as,
+    period_of,
+    periods,
+    resample_rule,
+    ui_names,
+)
 from data_fetcher import DataFetcher  # noqa: E402
 from strategy import StrategyEngine, STRATEGY_REGISTRY  # noqa: E402
 from strategy_nx import NXStrategyEngine  # noqa: E402
@@ -39,23 +46,10 @@ logger = logging.getLogger("stock_web.market")
 
 # ---------------------------------------------------------------- 基础配置
 
-INTERVALS = ["1m", "5m", "15m", "30m", "90m", "1h", "2h", "3h", "4h", "1d", "1wk"]
-PERIOD_MAP = {
-    "1m": "7d",
-    "5m": "60d",
-    "15m": "60d",
-    "30m": "60d",
-    "90m": "60d",
-    "1h": "730d",
-    "2h": "730d",
-    "3h": "730d",
-    "4h": "730d",
-    "1d": "5y",
-    "1wk": "10y",
-}
-
-# yfinance 不支持 2h/3h（4h 也统一重采样保证对齐）：用 1h 数据聚合
-_RESAMPLE_RULES = {"2h": "2h", "3h": "3h", "4h": "4h"}
+# 周期（含回溯范围 / 毫秒 / 是否重采样）统一由 intervals.py 声明，
+# 这里不再自己维护一份 —— 以前 PERIOD_MAP / INTERVALS / _RESAMPLE_RULES
+# 三份表 + data_fetcher + indicators_nx + main 各一份，改一处必漏一处。
+INTERVALS = ui_names()
 
 _fetcher = DataFetcher()
 _engine = StrategyEngine()
@@ -210,19 +204,20 @@ def _latest(df: pd.DataFrame, col: str) -> Optional[float]:
 
 def fetch_ohlcv(symbol: str, interval: str = "1d", period: Optional[str] = None) -> pd.DataFrame:
     """获取标准 OHLCV DataFrame（含时区归一化，带 300s 缓存避免重复拉取）。"""
-    period = period or PERIOD_MAP.get(interval, "1y")
+    period = period or period_of(interval)
     key = f"{symbol.upper().strip()}:{interval}:{period}"
     now = time.time()
     with _ohlcv_lock:
         cached = _ohlcv_cache.get(key)
         if cached and now - cached["_t"] < _OHLCV_TTL:
             return cached["df"].copy()
-    if interval in _RESAMPLE_RULES:
-        # 1h -> 2h/3h/4h 重采样
-        base = _fetcher.fetch(symbol.upper(), interval="1h", period=period)
+    rule = resample_rule(interval)
+    if rule:
+        # yfinance 没有这个周期（2h/3h/4h）：取源周期再聚合，保证同源、边界对齐
+        base = _fetcher.fetch(symbol.upper(), interval=fetch_as(interval), period=period)
         if base is None or base.empty:
             return base
-        df = _resample_ohlcv(base, _RESAMPLE_RULES[interval])
+        df = _resample_ohlcv(base, rule)
     else:
         df = _fetcher.fetch(symbol.upper(), interval=interval, period=period)
     with _ohlcv_lock:
@@ -272,14 +267,19 @@ def _compute_stats(df: pd.DataFrame, symbol: str, interval: str) -> Dict[str, An
     close = float(last["Close"])
     prev_close = float(prev["Close"]) if prev_close_nonzero(prev) else close
 
+    # 52 周高低要一年日线。优先复用手上这份（本身就是日线且够长），否则走
+    # fetch_ohlcv（带 300s 缓存）。以前直接 _fetcher.fetch 绕过缓存，每张收藏卡片、
+    # 每次详情页刷新都白打一次 yfinance。
     high52 = low52 = None
-    try:
-        year_df = _fetcher.fetch(symbol, interval="1d", period="1y")
-        if year_df is not None and not year_df.empty:
-            high52 = float(year_df["High"].max())
-            low52 = float(year_df["Low"].min())
-    except Exception:
-        pass
+    source = df if (interval == "1d" and len(df) >= 200) else None
+    if source is None:
+        try:
+            source = fetch_ohlcv(symbol, "1d", "1y")
+        except Exception:
+            source = None
+    if source is not None and not source.empty:
+        high52 = float(source["High"].max())
+        low52 = float(source["Low"].min())
 
     change = (close - prev_close) / prev_close * 100 if prev_close else None
     day_high = float(last["High"]) if not pd.isna(last["High"]) else None
@@ -433,7 +433,7 @@ def fetch_stock_data(
     payload = {
         "symbol": symbol,
         "interval": interval,
-        "period": period or PERIOD_MAP.get(interval, "1y"),
+        "period": period or period_of(interval),
         "rows": n,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "ohlcv": ohlcv,
@@ -754,7 +754,7 @@ def config_info() -> Dict[str, Any]:
     ]
     return {
         "intervals": INTERVALS,
-        "periods": PERIOD_MAP,
+        "periods": periods(),
         "strategies": strategies,
         "categories": [
             "科技", "消费", "金融", "医疗", "能源", "工业",

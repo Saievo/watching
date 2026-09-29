@@ -12,29 +12,13 @@ import pandas as pd
 import logging
 from typing import Optional, Tuple, List
 
+from intervals import ms_of
+
 logger = logging.getLogger(__name__)
 
-# K 线周期 -> 毫秒换算表
-INTERVAL_MS: dict = {
-    "1m":  60_000,
-    "2m":  120_000,
-    "5m":  300_000,
-    "15m": 900_000,
-    "30m": 1_800_000,
-    "90m": 5_400_000,
-    "1h":  3_600_000,
-    "60m": 3_600_000,
-    "2h":  7_200_000,
-    "3h":  10_800_000,
-    "4h":  14_400_000,
-    "1d":  86_400_000,
-    "1wk": 604_800_000,
-}
-
-
 def _interval_to_ms(interval: str) -> int:
-    """将周期字符串转为毫秒，未知周期返回 -1"""
-    return INTERVAL_MS.get(interval, -1)
+    """将周期字符串转为毫秒，未知周期返回 -1（周期表见 intervals.py）"""
+    return ms_of(interval)
 
 
 def _ts_ms(ts) -> int:

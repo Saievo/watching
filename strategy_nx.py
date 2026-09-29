@@ -23,8 +23,8 @@ from typing import Tuple
 from indicators_nx import (
     calc_nx_channel,
     calc_macd_divergence,
-    INTERVAL_MS,
 )
+from intervals import ms_of
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class NXStrategyEngine:
         if df is None or df.empty:
             return df
 
-        interval_ms = INTERVAL_MS.get(interval, 900_000)
+        interval_ms = ms_of(interval, 900_000)
         ts_latest_ms = int(df.index[-1].timestamp() * 1000)
         logger.debug(
             f"[NX指标] 计算开始 | 周期={interval}({interval_ms}ms) "
