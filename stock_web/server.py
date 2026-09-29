@@ -1325,10 +1325,10 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("STOCK_WEB_PORT", "8787"))
-    # Default to loopback. The dashboard has no authentication and can spend
-    # LLM credit / delete reports, so it must not listen on the LAN by default.
-    # Set STOCK_WEB_HOST=0.0.0.0 explicitly if you really want that.
-    host = os.environ.get("STOCK_WEB_HOST", "127.0.0.1")
+    # LAN access is intentional here — the dashboard is meant to be reachable
+    # from other devices on the network. Override with STOCK_WEB_HOST if you
+    # ever want to restrict it to loopback.
+    host = os.environ.get("STOCK_WEB_HOST", "0.0.0.0")
     shown = host if host not in ("0.0.0.0", "::") else "<本机IP>"
     logger.info("Stock Dashboard 运行在 http://%s:%d", shown, port)
     uvicorn.run(app, host=host, port=port, log_level="warning")
